@@ -1,6 +1,6 @@
 ---
 title: 'BMI 715 Final Project'
-author: "Dan Kats"
+author: "Curt Ginder, Ozzie Unlu"
 date: "`r Sys.Date()`"
 output:
   html_document: default
