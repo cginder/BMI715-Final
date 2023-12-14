@@ -1,0 +1,93 @@
+---
+title: 'BMI 715 Final Project'
+author: "Dan Kats"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Set-up
+```{r, message=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+
+nhanes <- read.csv("nhanes_13_14_subset.csv")
+nhanes$X <- NULL
+```
+
+## Exploratory analysis and QC
+
+##### Relationship between variables
+```{r}
+
+```
+
+##### Correlations/collinearity between predictors
+```{r}
+
+```
+
+##### Scale predictors that have a different range
+```{r}
+
+```
+
+##### Code categorical variables appropriately
+```{r}
+
+```
+
+##### Transform data if needed
+```{r}
+
+```
+
+##### Assess/remove/impute missing values
+```{r}
+
+```
+
+
+## Regression/classification model: Running
+
+##### Evaluate assumptions for your chosen model
+```{r}
+
+```
+
+##### Variable selection (forward, backward, stepwise), regularization (LASSO, Ridge, ElasticNet), and/or train/test splitting
+```{r}
+
+```
+
+##### Run your chosen model and report any key statistics
+```{r}
+
+```
+
+
+## Regression/classification model: Evaluating
+
+##### Choose, calculate, and appropriately interpret a metric
+```{r}
+
+```
+
+##### Include 1+ plot that you use to evaluate model fit
+```{r}
+
+```
+
+
+## Compare your model to one with different variables
+
+##### Run the alternate model
+```{r}
+
+```
+
+##### Calculate a metric to compare the models 
+```{r}
+
+```
