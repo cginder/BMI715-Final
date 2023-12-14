@@ -36,4 +36,27 @@ head(sort(df$LBXTC,decreasing=T))
 head(sort(df$LBXSTR,decreasing=T))
 
 df <- df %>% filter(LBXTC != 612 | LBXSTR != 6057)
+
+#Scale Continuous Variables
+scaled_df <- df %>% select(-c(X,LBXAPB,MCQ370A,SMQ020,HUQ051,HUQ010)) %>% scale()
+
+#Set Dummy Variables to 0/1 instead of 1/2
+dummy_df <- df  %>% select(c(MCQ370A,SMQ020)) 
+dummy_df$MCQ370A <- dummy_df$MCQ370A - 1
+dummy_df$SMQ020 <- dummy_df$SMQ020 - 1
+
+#Create Multiple Indicator Variables
+df$HUQ010 <- factor(df$HUQ010)
+df$HUQ051 <- factor(df$HUQ051)
+indicator_df <- df %>% select(c(HUQ051, HUQ010)) %>%
+  data.frame(., model.matrix( ~ HUQ010 + HUQ051, .)[, -1]) %>%
+  select(!c(HUQ051, HUQ010))
+
+#Combine back into dataframe
+
+model_df <- cbind(df[,c("X","LBXAPB")],scaled_df,dummy_df,indicator_df)
+                         
+                         
+
+
      
