@@ -53,7 +53,6 @@ indicator_df <- df %>% select(c(HUQ051, HUQ010)) %>%
   select(!c(HUQ051, HUQ010))
 
 #Combine back into dataframe
-
 model_df <- cbind(df[,c("X","LBXAPB")],scaled_df,dummy_df,indicator_df)
                          
                          
