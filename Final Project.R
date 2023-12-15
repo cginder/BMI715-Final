@@ -60,12 +60,28 @@ indicator_df <- df %>% select(c(HUQ051, HUQ010)) %>%
 model_df <- cbind(df$LBXAPB,scaled_df,dummy_df,indicator_df)
 colnames(model_df)[1] <- "LBXAPB"
 
+#
+tobacco_groups <- split(df$LBXTC, df$SMQ020)
+
+# Histogram for the distribution of LBXTC
+hist(df$LBXTC, main = "Distribution of Total Cholesterol (LBXTC)", xlab = "Total Cholesterol")
+hist(tobacco_groups[[1]])
+hist(tobacco_groups[[2]])
+
+# Normality Test
+shapiro.test(df$LBXTC)
+shapiro.test(tobacco_groups[[1]])
+shapiro.test(tobacco_groups[[2]])
+
+#Perform the Mann-Whitney U test (Wilcoxon Rank-Sum test)
+wilcox.test(tobacco_groups[[1]], tobacco_groups[[2]])
+
+
 # Build the main linear regression model and check residuals
 model_main <- lm(LBXAPB ~ ., data = model_df)
 summary(model_main)
 par(mfrow = c(2, 2))
 plot(model_main)
-
 
 # Stepwise model selection
 full_model <- lm(LBXAPB ~ ., data = model_df)
@@ -74,16 +90,19 @@ library(MASS)
 stepwise_model <- stepAIC(full_model, direction = "both")
 summary(stepwise_model)
 
-# ElasticNet
+#Build the final model based on the stepwise variable selection
+final_model<- lm(LBXAPB ~ BMXBMI + LBXTC + LBXGH + LBXSTR + SMQ020 + HUQ0103 + 
+                   HUQ0104 + HUQ0105 + HUQ0512 + HUQ0513 + HUQ0516 + HUQ0518, data = model_df)
 
-x <- model.matrix(~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = model_df)[,-1]
+summary(final_model)
+
+# ElasticNet
+x <- model.matrix(~.-LBXAPB, data = model_df)[,-1]
 y <- model_df$LBXAPB
 
 cv_model_full <- cv.glmnet(x, y, alpha = 0.5) 
 plot(cv_model_full)
-#Optimal lambda is chosen based on the cross-validation result.I think this should be 2 here but will double check.
-
-
+coef(cv_model_full, s = "lambda.1se")
 
 #Random Forest Analysis
 set.seed(715)
@@ -94,7 +113,7 @@ rf_df$APOB_cat <- ""
 rf_df$APOB_cat[rf_df$LBXAPB >= 100] <- 1
 rf_df$APOB_cat[rf_df$LBXAPB < 100] <- 0
 rf_df$APOB_cat <- factor(rf_df$APOB_cat)
-rf_df <- rf_df %>% select(-c(X,LBXAPB))
+rf_df <- rf_df %>% dplyr::select(-c(X,LBXAPB))
 
 #Split into 4:1 test/train data
 train_index <- createDataPartition(rf_df$APOB_cat, p=0.8, list=F)
