@@ -1,5 +1,7 @@
 #Libraries
 library(tidyverse)
+library(glmnet)
+library(MASS)
 
 #Read Filtered Data
 filtered_df <- read.csv("Filtered Data.csv")
@@ -36,4 +38,26 @@ head(sort(df$LBXTC,decreasing=T))
 head(sort(df$LBXSTR,decreasing=T))
 
 df <- df %>% filter(LBXTC != 612 | LBXSTR != 6057)
+
+# Cuild the main linear regression model and check residuals
+model_main <- lm(LBXAPB ~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = df)
+summary(model_main)
+par(mfrow = c(2, 2))
+plot(model)
+
+
+# Stepwise model selection
+full_model <- lm(LBXAPB ~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = df)
+
+stepwise_model <- stepAIC(full_model, direction = "both")
+summary(stepwise_model)
+
+# ElasticNet
+
+x <- model.matrix(~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = df)[,-1]
+y <- df$LBXAPB
+
+cv_model_full <- cv.glmnet(x, y, alpha = 0.5) 
+plot(cv_model_full)
+#Optimal lambda is chosen based on the cross-validation result.I think this should be 2 here but will double check.
      
