@@ -39,25 +39,42 @@ head(sort(df$LBXSTR,decreasing=T))
 
 df <- df %>% filter(LBXTC != 612 | LBXSTR != 6057)
 
+#Scale Continuous Variables
+scaled_df <- df %>% select(-c(X,LBXAPB,MCQ370A,SMQ020,HUQ051,HUQ010)) %>% scale()
+
+#Set Dummy Variables to 0/1 instead of 1/2
+dummy_df <- df  %>% select(c(MCQ370A,SMQ020)) 
+dummy_df$MCQ370A <- dummy_df$MCQ370A - 1
+dummy_df$SMQ020 <- dummy_df$SMQ020 - 1
+
+#Create Multiple Indicator Variables
+df$HUQ010 <- factor(df$HUQ010)
+df$HUQ051 <- factor(df$HUQ051)
+indicator_df <- df %>% select(c(HUQ051, HUQ010)) %>%
+  data.frame(., model.matrix( ~ HUQ010 + HUQ051, .)[, -1]) %>%
+  select(!c(HUQ051, HUQ010))
+
+#Combine back into dataframe
+model_df <- cbind(df[,c("X","LBXAPB")],scaled_df,dummy_df,indicator_df)
+
 # Build the main linear regression model and check residuals
-model_main <- lm(LBXAPB ~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = df)
+model_main <- lm(LBXAPB ~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = model_df)
 summary(model_main)
 par(mfrow = c(2, 2))
 plot(model)
 
 
 # Stepwise model selection
-full_model <- lm(LBXAPB ~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = df)
+full_model <- lm(LBXAPB ~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = model_df)
 
 stepwise_model <- stepAIC(full_model, direction = "both")
 summary(stepwise_model)
 
 # ElasticNet
 
-x <- model.matrix(~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = df)[,-1]
-y <- df$LBXAPB
+x <- model.matrix(~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = model_df)[,-1]
+y <- model_df$LBXAPB
 
 cv_model_full <- cv.glmnet(x, y, alpha = 0.5) 
 plot(cv_model_full)
 #Optimal lambda is chosen based on the cross-validation result.I think this should be 2 here but will double check.
-     
