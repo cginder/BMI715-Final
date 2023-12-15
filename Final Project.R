@@ -131,6 +131,15 @@ conf_matrix <- confusionMatrix(predictions,test_df$APOB_cat)
 
 conf_matrix
 
-importance_values <- importance(rf_model)
-
+#Importance Plot
+importance_values <- data.frame(importance(rf_model)) %>% rownames_to_column("Variable")
+importance_values$Variable <- factor(importance_values$Variable,levels = importance_values$Variable[order(importance_values$MeanDecreaseGini,decreasing = F)])
 importance_values
+
+importance_values %>% ggplot(aes(y=MeanDecreaseGini,x=Variable)) +
+  geom_bar(stat="identity",fill="blue") +
+  coord_flip() +
+  labs(title = "Variable Importance")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+  
