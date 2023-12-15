@@ -10,84 +10,369 @@ output:
 ## Set-up
 ```{r, message=FALSE}
 library(tidyverse)
+library(ggplot2)
+library(tableone)
+library(glmnet)
+library(randomForest)
+library(caret)
 knitr::opts_chunk$set(echo = TRUE)
 
-nhanes <- read.csv("nhanes_13_14_subset.csv")
-nhanes$X <- NULL
+rawdata  <- read.csv("nhanes_13_14_subset.csv")
 ```
 
+##Data Prepararation
+```{r}
+#Candidate Variables
+candidates <- c("X", #Respondent ID
+                "LBXAPB", #ApoB, dependent variable
+                "BPXSY1", #SBP1
+                "BPXSY2", #SBP2
+                "BPXSY3", #SBP3
+                "BPXSY4", #SBP4
+                "BPXDI1", #DBP1
+                "BPXDI2", #DBP2
+                "BPXDI3", #DBP3
+                "BPXDI4", #DBP4
+                "MCQ370A", #Controlling or losing weight?
+                "MCQ370B", #Increasing exercise?
+                "BMXBMI", #BMI
+                "SMQ020", #Tobacco Use
+                "LBXTC", #Total Cholesterol
+                "LBXGH", #A1c
+                "LBXSTR", #Triglycerides
+                "LBXSCR", #Creatinine
+                "HUQ051", #Number of times received healthcare over last year
+                "HUQ010", #Health Quality 1-5
+                "BPQ100D", #Currently taking cholesterol med?
+                "BPQ020", #Told high blood pressure?
+                "BPQ030", #Told high blood pressure more than once?
+                "BPQ040A", #Taking a prescription for HTN
+                "BPXPLS", #Pulse
+                "BPQ090D", #Cholesterol med?
+                "HUQ071", #Number of admissions in last year?
+                "MCQ160E", #Prior heart attack?
+                "MCQ160F", #Prior stroke?
+                "MCQ370C", #Are you reducing salt in diet?
+                "SMQ040") #Currently smoke cigarettes?
+ 
+
+#Filter to candidate indepent variables and include only those with an ApoB Measurement
+data <- rawdata %>% select(any_of(candidates)) %>% filter(!is.na(LBXAPB))
+
+#Assess Respondent Coverage by Variable
+#Categorical Variables
+cat_vars <- c("MCQ370A", #Controlling or losing weight?
+             "MCQ370B", #Increasing exercise?
+             "SMQ020", #Tobacco Use
+             "HUQ051", #Number of times received healthcare over last year
+             "HUQ010", #Health Quality 1-5
+             "BPQ100D", #Currently taking cholesterol med?
+             "BPQ020", #Told high blood pressure?
+             "BPQ030", #Told high blood pressure more than once?
+             "BPQ040A", #Taking a prescription for HTN
+             "BPQ090D", #Cholesterol med?
+             "HUQ071", #Number of admissions in last year?
+             "MCQ160E", #Prior heart attack?
+             "MCQ160F", #Prior stroke?
+             "MCQ370C", #Are you reducing salt in diet?
+             "SMQ040") #Currently smoke cigarettes?
+
+table <- CreateTableOne(data=data, vars=candidates,factorVars = cat_vars)
+
+summary(table)
+```
+
+```{r}
+#Remove Low Coverage Variables (More than 15% Missing)
+low_coverage_vars <- c("BPQ100D", #Currently taking cholesterol med?
+                      "BPQ030", #Told high blood pressure more than once?
+                      "BPQ040A", #Taking a prescription for HTN
+                      "BPQ090D", #Cholesterol med?
+                      "MCQ160E", #Prior heart attack?
+                      "MCQ160F", #Prior stroke?
+                      "SMQ040") #Currently smoke cigarettes?
+
+data <- data %>% select(!any_of(low_coverage_vars))                 
+
+#Combine BPs into one average reading, removing individual columns
+
+data <- data  %>%  mutate(avgSBP = round(rowMeans(select(.,BPXSY1,BPXSY2,BPXSY3,BPXSY4),na.rm=T),0),
+                          avgDBP = round(rowMeans(select(.,BPXDI1,BPXDI2,BPXDI3,BPXDI4),na.rm=T),0))
+
+bp_vars <- c("BPXSY1", #SBP1
+                "BPXSY2", #SBP2
+                "BPXSY3", #SBP3
+                "BPXSY4", #SBP4
+                "BPXDI1", #DBP1
+                "BPXDI2", #DBP2
+                "BPXDI3", #DBP3
+                "BPXDI4") #DBP4
+
+data <- data %>% select(!any_of(bp_vars))
+
+#Drop NA Rows (9, 99 for all categorical variables, and 7 for all cat variables except HUQ051)
+retained_cat_vars <- cat_vars[!(cat_vars %in% low_coverage_vars)]
+
+filtered_df <- data %>%
+  filter(rowSums(sapply(select(., all_of(retained_cat_vars)), function(x) x %in% c(7, 9, 99)), na.rm = TRUE) == 0 | HUQ051 == 7)
+
+table2 <- CreateTableOne(data=filtered_df, vars=candidates,factorVars = retained_cat_vars)
+
+summary(table2)
+
+#Keep only complete cases
+filtered_df <- filtered_df %>% filter(complete.cases(.))
+
+```
+```{r}
+#Selection of Indepenent Variables
+variables <- c(  "X", #Respondent ID
+                 "LBXAPB", #ApoB, dependent variable
+                 "avgSBP", #Calculated Average SBP during processing script
+                 "MCQ370A", #Controlling or losing weight?
+                 "MCQ370B", #Increasing exercise?
+                 "BMXBMI", #BMI
+                 "SMQ020", #Tobacco Use
+                 "LBXTC", #Total Cholesterol
+                 "LBXGH", #A1c
+                 "LBXSTR", #Triglycerides
+                 "HUQ051", #Number of times received healthcare over last year
+                 "HUQ010") #Health Quality 1-5
+
+df <- filtered_df %>% select(any_of(variables))
+```
 ## Exploratory analysis and QC
 
 ##### Relationship between variables
 ```{r}
-
+df %>% select(-c(X,LBXAPB)) %>% plot()
+df %>% select(-c(X,LBXAPB)) %>% cor()
 ```
 
-##### Correlations/collinearity between predictors
-```{r}
-
+```{txt}
+MCQ370A and MCQ370B highly correlated at 0.47, remove MCQ370B
+MCQ370A and BMI negatively correlated at -.23, keep
+Triglycerides and TC correlated at 0.35, keep due to pathophysiologic plausability
+HUQ010 and HUQ051 correlated at 0.22, keep
 ```
 
-##### Scale predictors that have a different range
 ```{r}
+df <- df %>% select(-MCQ370B)
 
+#Remove Outliers in LBXTC and LBXSTR
+head(sort(df$LBXTC,decreasing=T))
+head(sort(df$LBXSTR,decreasing=T))
+
+df <- df %>% filter(LBXTC != 612 | LBXSTR != 6057)
+```
+
+
+##### Scale continuous variables
+```{r}
+scaled_df <- df %>% select(-c(X,LBXAPB,MCQ370A,SMQ020,HUQ051,HUQ010)) %>% scale()
 ```
 
 ##### Code categorical variables appropriately
 ```{r}
+#Set Dummy Variables to 0/1 instead of 1/2
+dummy_df <- df  %>% select(c(MCQ370A,SMQ020)) 
+dummy_df$MCQ370A <- dummy_df$MCQ370A - 1
+dummy_df$SMQ020 <- dummy_df$SMQ020 - 1
+
+#Create Multiple Indicator Variables
+df$HUQ010 <- factor(df$HUQ010)
+df$HUQ051 <- factor(df$HUQ051)
+indicator_df <- df %>% select(c(HUQ051, HUQ010)) %>%
+  data.frame(., model.matrix( ~ HUQ010 + HUQ051, .)[, -1]) %>%
+  select(!c(HUQ051, HUQ010))
+
+#Combine back into dataframe
+model_df <- cbind(df$LBXAPB,scaled_df,dummy_df,indicator_df)
+colnames(model_df)[1] <- "LBXAPB"
 
 ```
 
-##### Transform data if needed
+
+
+## Conduct a two-sample hypothesis test 
+```{txt}
+We would like to know if smokers have higher levels of total cholesterol levels. In case smoking status is found to be a significant predictor in the regression model for ApoB, we would like to know if there is a mediation effect due to total cholesterol. 
+```
+
 ```{r}
+#Split groups based on smoking status
+tobacco_groups <- split(df$LBXTC, df$SMQ020)
 
+# Histogram for the distribution of LBXTC
+hist(df$LBXTC, main = "Distribution of Total Cholesterol (LBXTC)", xlab = "Total Cholesterol")
+hist(tobacco_groups[[1]])
+hist(tobacco_groups[[2]])
+
+# Normality Test
+shapiro.test(df$LBXTC)
+shapiro.test(tobacco_groups[[1]])
+shapiro.test(tobacco_groups[[2]])
 ```
 
-##### Assess/remove/impute missing values
+```{txt}
+The results from the shapiro-wilk test and histograms show slight skewness of the total cholesterol distribution. Given that our sample size is large, we would still expect CLT to apply. However, in order to ensure we do not make any type 1 errors, we chose to conduct a non-parametric test here.
+```
+
 ```{r}
-
+#Perform the Wilcoxon Rank-Sum test. It is one-sided since we are interested in median of TC being greater in smokers than non-smokers 
+wilcox.test(tobacco_groups[[1]], tobacco_groups[[2]], alternative = "greater")
 ```
 
+```{txt}
+Based on these results we cannot reject the null hypothesis that the median total cholesterol is not different in smokers and non-smokers.
+```
 
 ## Regression/classification model: Running
 
+```{txt}
+We will develop a linear regression model to evaluate the correlation between total cholesterol and ApoB levels, and to identify additional predictors of ApoB levels.
+```
+
 ##### Evaluate assumptions for your chosen model
+
+```{txt}
+Assumptions that needs to be met for linear regression models:
+  
+-Linearity
+-Independence
+-Normality
+-Equal variances
+```
+
 ```{r}
+## Build the model and check assumptions
+plot(model_df$LBXTC,model_df$LBXAPB)
+model_main <- lm(LBXAPB ~ ., data = model_df)
+plot(model_main)
+
+plot(model_df$LBXTC, fitted(model_main))
+hist(resid(model_main), main="Histogram of Residuals for the Main Model", xlab="Residuals")
 
 ```
 
-##### Variable selection (forward, backward, stepwise), regularization (LASSO, Ridge, ElasticNet), and/or train/test splitting
+```{txt}
+Linear:Met based on the plot between TC and ApoB above.
+Independence: We know that NHANES has independent participants and observations/measurements.
+Normality and equal variances: Plotted the residuals above to assess normality and equal variances. The residuals seem to have a normal/close to normal distribution with mean = 0 and constant variance
+
+Therefore all assumptions are met for a linear regression model.
+```
+
 ```{r}
+summary(model_main)
+```
+
+##### Variable selection and regularization
+```{r}
+# Stepwise model selection
+library(MASS)
+stepwise_model <- stepAIC(model_main, direction = "both")
+summary(stepwise_model)
+```
+
+```{r}
+#Build the final model based on the stepwise variable selection
+final_model<- lm(LBXAPB ~ BMXBMI + LBXTC + LBXGH + LBXSTR + SMQ020 + HUQ0103 + 
+                   HUQ0104 + HUQ0105 + HUQ0512 + HUQ0513 + HUQ0516 + HUQ0518, data = model_df)
+
+summary(final_model)
 
 ```
 
-##### Run your chosen model and report any key statistics
 ```{r}
+#Compare final model to the initial model
+AIC(final_model) 
+AIC(model_main)
+
+```
+```{txt}
+The AIC for the final model is lower than the initial model which means that it is a better fit model, although in general the AIC are very similar. Similarly R-squaredfor the initial model is 0.7704 while it is 0.7698 for the final model suggesting similar ability to explain the data.
+```
+
+
+```{r}
+#Further improve model with regularization using ElasticNet
+# ElasticNet
+x <- model.matrix(~.-LBXAPB, data = model_df)[,-1]
+y <- model_df$LBXAPB
+
+cv_model_full <- cv.glmnet(x, y, alpha = 0.5) 
+plot(cv_model_full)
+
+cv_model_full <- glmnet(x, y, alpha = 0.5, lambda = cv_model_full$lambda.min) 
+
+coef(cv_model_full)
 
 ```
 
 
-## Regression/classification model: Evaluating
-
-##### Choose, calculate, and appropriately interpret a metric
 ```{r}
+#Compare three models 
+
+predictions_main <- model_main %>% predict(model_df[,-1]) %>% as.vector
+predictions_final <- final_model %>% predict(model_df[,-1]) %>% as.vector
+predictions_full <- cv_model_full %>% predict(x) %>% as.vector
+
+RMSE(predictions_main, model_df[,1])
+RMSE(predictions_final, model_df[,1])
+RMSE(predictions_full, model_df[,1])
+
+R2(predictions_main, model_df[,1])
+R2(predictions_final, model_df[,1])
+R2(predictions_full, model_df[,1])
 
 ```
-
-##### Include 1+ plot that you use to evaluate model fit
-```{r}
-
+```{txt}
+Based on the absolute RMSE and R-square values above, the initial model seems to perform the best; however, the performance of each model seem to be extremely close. Therefore, in order to avoid overfitting, we will choose the model called "final_model" which was built based on stepwise variable selection.
 ```
 
 
-## Compare your model to one with different variables
-
-##### Run the alternate model
+## Follow-up analysis to build a random forest model for prediction of ApoB as a binary outcome
 ```{r}
+#Random Forest Analysis
+set.seed(715)
 
+#dichotomize ApoB to < 100 vs >= 100
+rf_df <- df
+rf_df$APOB_cat <- ""
+rf_df$APOB_cat[rf_df$LBXAPB >= 100] <- 1
+rf_df$APOB_cat[rf_df$LBXAPB < 100] <- 0
+rf_df$APOB_cat <- factor(rf_df$APOB_cat)
+rf_df <- rf_df %>% dplyr::select(-c(X,LBXAPB))
+
+#Split into 4:1 test/train data
+train_index <- createDataPartition(rf_df$APOB_cat, p=0.8, list=F)
+train_df <- rf_df[train_index,]
+test_df <- rf_df[-train_index,]
+
+#Train RF Model
+rf_model <- randomForest(APOB_cat~.,data=train_df,ntree=500,importance=T)
+
+#Predictions on Test Dataset
+predictions <- predict(rf_model,newdata = test_df)
 ```
 
-##### Calculate a metric to compare the models 
+##### Test the performance metrics of prediction
 ```{r}
 
+#Confusion Matrix
+conf_matrix <- confusionMatrix(predictions,test_df$APOB_cat)
+
+conf_matrix
+
+#Importance Plot
+importance_values <- data.frame(importance(rf_model)) %>% rownames_to_column("Variable")
+importance_values$Variable <- factor(importance_values$Variable,levels = importance_values$Variable[order(importance_values$MeanDecreaseGini,decreasing = F)])
+importance_values
+
+importance_values %>% ggplot(aes(y=MeanDecreaseGini,x=Variable)) +
+  geom_bar(stat="identity",fill="blue") +
+  coord_flip() +
+  labs(title = "Variable Importance")+
+  theme(plot.title = element_text(hjust = 0.5))
 ```
