@@ -1,7 +1,9 @@
 #Libraries
 library(tidyverse)
 library(glmnet)
-library(MASS)
+library(randomForest)
+library(caret)
+#library(MASS)
 
 #Read Filtered Data
 filtered_df <- read.csv("Filtered Data.csv")
@@ -55,20 +57,23 @@ indicator_df <- df %>% select(c(HUQ051, HUQ010)) %>%
   select(!c(HUQ051, HUQ010))
 
 #Combine back into dataframe
-model_df <- cbind(df[,c("X","LBXAPB")],scaled_df,dummy_df,indicator_df)
+model_df <- cbind(df$LBXAPB,scaled_df,dummy_df,indicator_df)
+colnames(model_df)[1] <- "LBXAPB"
 
 # Build the main linear regression model and check residuals
-model_main <- lm(LBXAPB ~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = model_df)
+model_main <- lm(LBXAPB ~ ., data = model_df)
 summary(model_main)
 par(mfrow = c(2, 2))
-plot(model)
+plot(model_main)
 
 
 # Stepwise model selection
-full_model <- lm(LBXAPB ~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = model_df)
+full_model <- lm(LBXAPB ~ ., data = model_df)
 
+library(MASS)
 stepwise_model <- stepAIC(full_model, direction = "both")
 summary(stepwise_model)
+detach(package:MASS,unload=TRUE)
 
 # ElasticNet
 
@@ -78,3 +83,36 @@ y <- model_df$LBXAPB
 cv_model_full <- cv.glmnet(x, y, alpha = 0.5) 
 plot(cv_model_full)
 #Optimal lambda is chosen based on the cross-validation result.I think this should be 2 here but will double check.
+
+
+
+#Random Forest Analysis
+set.seed(715)
+
+#dichotomize ApoB to < 100 vs >= 100
+rf_df <- df
+rf_df$APOB_cat <- ""
+rf_df$APOB_cat[rf_df$LBXAPB >= 100] <- 1
+rf_df$APOB_cat[rf_df$LBXAPB < 100] <- 0
+rf_df$APOB_cat <- factor(rf_df$APOB_cat)
+rf_df <- rf_df %>% select(-c(X,LBXAPB))
+
+#Split into 4:1 test/train data
+train_index <- createDataPartition(rf_df$APOB_cat, p=0.8, list=F)
+train_df <- rf_df[train_index,]
+test_df <- rf_df[-train_index,]
+
+#Train RF Model
+rf_model <- randomForest(APOB_cat~.,data=train_df,ntree=500,importance=T)
+
+#Predictions on Test Dataset
+predictions <- predict(rf_model,newdata = test_df)
+
+#Confusion Matrix
+conf_matrix <- confusionMatrix(predictions,test_df$APOB_cat)
+
+conf_matrix
+
+importance_values <- importance(rf_model)
+
+importance_values
