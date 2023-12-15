@@ -6,7 +6,7 @@ library(caret)
 #library(MASS)
 
 #Read Filtered Data
-filtered_df <- read.csv("Filtered Data.csv")
+filtered_df<- read.csv("Filtered Data.csv")
 filtered_df <- filtered_df[,-1] #remove rowID read in
 
 #Selection of Indepenent Variables
@@ -74,7 +74,7 @@ shapiro.test(tobacco_groups[[1]])
 shapiro.test(tobacco_groups[[2]])
 
 #Perform the Mann-Whitney U test (Wilcoxon Rank-Sum test)
-wilcox.test(tobacco_groups[[1]], tobacco_groups[[2]])
+wilcox.test(tobacco_groups[[1]], tobacco_groups[[2]], alternative = "greater")
 
 
 # Build the main linear regression model and check residuals
