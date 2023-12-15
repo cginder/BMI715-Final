@@ -39,7 +39,7 @@ head(sort(df$LBXSTR,decreasing=T))
 
 df <- df %>% filter(LBXTC != 612 | LBXSTR != 6057)
 
-# Cuild the main linear regression model and check residuals
+# Build the main linear regression model and check residuals
 model_main <- lm(LBXAPB ~ avgSBP + MCQ370A + BMXBMI + SMQ020 + LBXTC + LBXGH + LBXSTR + HUQ051 + HUQ010, data = df)
 summary(model_main)
 par(mfrow = c(2, 2))
