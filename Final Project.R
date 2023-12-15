@@ -73,7 +73,6 @@ full_model <- lm(LBXAPB ~ ., data = model_df)
 library(MASS)
 stepwise_model <- stepAIC(full_model, direction = "both")
 summary(stepwise_model)
-detach(package:MASS,unload=TRUE)
 
 # ElasticNet
 
